@@ -64,6 +64,7 @@ with col1:
     skill_name = st.text_input("Skill / Training Name *", placeholder="e.g., NH MKT Training")
     batch_id = st.text_input("Batch ID *", placeholder="e.g., SPSSELLER-LNH-IND-BLR-2024-04-22-X-MKT33")
     skill_details = st.text_area("Skill Details (Topic Description) *", placeholder="e.g., New Hire Marketing Training - Module 3", height=80)
+    trainer_name = st.text_input("Trainer Name *", placeholder="e.g., John Doe", help="Also used as email signature")
     st.markdown("**Shift Details**")
     shift_col1, shift_col2 = st.columns(2)
     with shift_col1:
