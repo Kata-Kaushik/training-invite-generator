@@ -64,8 +64,22 @@ with col1:
     skill_name = st.text_input("Skill / Training Name *", placeholder="e.g., NH MKT Training")
     batch_id = st.text_input("Batch ID *", placeholder="e.g., SPSSELLER-LNH-IND-BLR-2024-04-22-X-MKT33")
     skill_details = st.text_area("Skill Details (Topic Description) *", placeholder="e.g., New Hire Marketing Training - Module 3", height=80)
-    trainer_name = st.text_input("Trainer Name *", placeholder="e.g., John Doe", help="Also used as email signature")
-    shift_details = st.text_input("Shift Details and WOs *", placeholder="e.g., Shift A (9:00 AM - 6:00 PM IST), WO: 12345")
+    st.markdown("**Shift Details**")
+    shift_col1, shift_col2 = st.columns(2)
+    with shift_col1:
+        shift_start_time = st.time_input("Shift Start Time *", value=datetime.time(9, 0), help="Shift start time")
+    with shift_col2:
+        shift_end_time = st.time_input("Shift End Time *", value=datetime.time(18, 0), help="Shift end time")
+    timezone = st.selectbox("Time Zone *", options=["IST", "PST", "EST", "CST", "MST", "GMT", "UTC", "SGT", "JST", "AEST", "CET"], index=0, help="Select the time zone for the shift")
+
+    st.markdown("**Week Offs**")
+    days_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    wo_col1, wo_col2 = st.columns(2)
+    with wo_col1:
+        wo_start_day = st.selectbox("WO Start Day *", options=days_of_week, index=5, help="First day of week off")
+    with wo_col2:
+        wo_end_day = st.selectbox("WO End Day *", options=days_of_week, index=6, help="Last day of week off")
+
     adobe_connect_link = st.text_input("Adobe Connect Room Link *", placeholder="e.g., https://amazon.adobeconnect.com/room-name/")
 
 with col2:
@@ -230,20 +244,22 @@ def send_outlook_calendar_invite(subject, plain_body, required_emails, optional_
 st.subheader("Preview and Send")
 
 DEFAULT_DL = "griffin-btr@share.corp.amazon.com"
+DEFAULT_DL = "griffin-btr@share.corp.amazon.com"
+
+# Construct shift_details from individual fields
+shift_details = f"{shift_start_time.strftime('%I:%M %p')} - {shift_end_time.strftime('%I:%M %p')} {timezone}, WOs: {wo_start_day} & {wo_end_day}"
 
 required_fields = {
     "Skill Name": skill_name,
     "Batch ID": batch_id,
     "Skill Details": skill_details,
     "Trainer Name": trainer_name,
-    "Shift Details": shift_details,
     "Adobe Connect Link": adobe_connect_link,
     "Required Attendees": required_attendees,
     "Sender Email": sender_email
 }
 
 missing_fields = [k for k, v in required_fields.items() if not v.strip()]
-
 if missing_fields:
     st.warning(f"Please fill in the following required fields: **{', '.join(missing_fields)}**")
 
@@ -253,6 +269,11 @@ if all(v.strip() for v in required_fields.values()):
     plain_body = generate_plain_text_body(skill_details, trainer_name, shift_details, adobe_connect_link)
     duration_display = f"{format_date_display(start_date)} to {format_date_display(end_date)}"
     req_emails = process_attendees(required_attendees)
+    opt_emails = process_attendees(optional_attendees)
+    if DEFAULT_DL not in opt_emails:
+        opt_emails.append(DEFAULT_DL)
+    start_dt = datetime.datetime.combine(start_date, shift_start_time)
+    end_dt = datetime.datetime.combine(start_date, shift_end_time)
     opt_emails = process_attendees(optional_attendees)
     if DEFAULT_DL not in opt_emails:
         opt_emails.append(DEFAULT_DL)
