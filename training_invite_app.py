@@ -4,6 +4,7 @@ import datetime
 import re
 import platform
 import uuid
+import urllib.parse
 from io import BytesIO
 
 # Try to import Windows-specific modules
@@ -18,7 +19,7 @@ except ImportError:
 
 # ============================================================
 # TRAINING INVITATION GENERATOR & SENDER
-# SPS-WE IND - Streamlit + Outlook COM (local) + ICS (cloud)
+# SPS-WE IND - Streamlit + Outlook COM (local) + Mailto (cloud)
 # ============================================================
 
 st.set_page_config(
@@ -27,7 +28,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
@@ -55,12 +56,22 @@ st.markdown("""
         border: 1px solid #ffc107;
         color: #856404;
     }
-    .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #cce5ff;
-        border: 1px solid #b8daff;
-        color: #004085;
+    .outlook-btn {
+        display: inline-block;
+        padding: 0.75rem 2rem;
+        background-color: #0078d4;
+        color: white !important;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        text-align: center;
+        margin: 10px 0;
+    }
+    .outlook-btn:hover {
+        background-color: #005a9e;
+        color: white !important;
+        text-decoration: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -75,7 +86,7 @@ st.markdown('<div class="sub-header">SPS-WE IND | Auto-generate and send trainin
 if OUTLOOK_AVAILABLE:
     st.success("**Mode: Local (Outlook Direct Send)** - Calendar invites will be sent directly from your Outlook")
 else:
-    st.info("**Mode: Cloud (ICS Download)** - Generate and download calendar invite file to send via your Outlook")
+    st.info("**Mode: Cloud** - Click the generated button to open a pre-filled invite in your Outlook")
 
 st.divider()
 
@@ -175,12 +186,6 @@ with col2:
         help="Your name for the signature"
     )
 
-    sender_email = st.text_input(
-        "Your Email (Sender) *",
-        placeholder="e.g., johndoe@amazon.com",
-        help="Your email address (used as organizer in calendar invite)"
-    )
-
     sender_signature = st.text_area(
         "Your Signature (Optional)",
         placeholder="e.g., John Doe | SPS-WE Training Team | Slack: @johndoe",
@@ -211,7 +216,7 @@ def generate_subject(skill, batch, start, end):
 
 
 def generate_html_body(skill_details, trainer_name, shift_details, adobe_link, sender_name, sender_sig):
-    """Generate the HTML email body based on the template"""
+    """Generate the HTML email body for preview"""
     signature = sender_sig if sender_sig else sender_name
 
     html_body = f"""<html>
@@ -275,96 +280,78 @@ def generate_html_body(skill_details, trainer_name, shift_details, adobe_link, s
 
 
 def generate_plain_text_body(skill_details, trainer_name, shift_details, adobe_link, sender_name, sender_sig):
-    """Generate styled plain text email body matching the Word template formatting"""
+    """Generate plain text email body for mailto and Outlook COM"""
     signature = sender_sig if sender_sig else sender_name
 
-    body = (
-        "Hello Everyone!\n\n"
-        f"You have been invited to join a training session on {skill_details}\n\n"
-        f"Your Trainer will be: {trainer_name}. Shift: {shift_details}\n\n"
-        "Please respond to this e-invite to confirm your attendance.\n\n"
-        "\n"
-        "Link to Adobe Connect Room (to be opened via the Adobe Connect App only)\n\n"
-        f"{adobe_link}\n\n"
-        "\n"
-        "NOTE: Since all WW SPS-WE trainings may involve customer accounts, Slack is NOT an approved tool for sharing customer data. "
-        "Please make sure Adobe Connect is installed and ready before your training begins.\n\n"
-        "Supervisors and Managers listed as optional attendees are added for visibility only. "
-        "If this training isn't relevant to you, please skip it and/or decline the invite so it doesn't block your calendar.\n\n"
-        "\n"
-        "First time using Adobe Connect?\n\n"
-        "Please ensure that the Adobe Connect application is installed on your laptop. If it isn't already installed, you can do so by following these steps:\n"
-        'Start Menu > Search for "Software Center" > Open Software Center > Search for "Adobe Connect" > Click "Install."\n\n'
-        "Once installed, please copy the room link, paste it in the application and click on Continue. "
-        "Now select Guest as the option and type your full name. Post that, click on Enter Room.\n\n"
-        "Please join 5 - 10 minutes early to have everything setup before the class begins.\n\n"
-        "Finally, ensure that the below hardware and software are available and set up:\n\n"
-        "  [YES] Please ensure you are camera-ready, as this is a virtual session. You will need to appear on camera for certain segments, such as Debrief Sessions, VILT Sessions, and Q&A\n"
-        "  [NO]  Please do NOT open Adobe Connect via a browser\n"
-        "  [YES] Corporate USB Headset (Not your own headset)\n"
-        "  [YES] Please be available on Slack during the training\n\n"
-        "\n"
-        "Issues with Adobe Connect Application?\n"
-        "  - Troubleshoot Adobe Connect | 24*7 Chat Support\n"
-        "  - If you cannot install it due to laptop permissions, request Admin Rights\n"
-        "  - If you still struggle with installing Adobe Connect, contact IT immediately\n\n"
-        "\n"
-        "Please reach out, should there be any questions/concerns. I'm looking forward to having you in the training!\n\n"
-        f"{signature}\n"
-    )
+    body = f"""Hello Everyone!
+
+You have been invited to join a training session on {skill_details}
+
+Your Trainer will be: {trainer_name}. Shift: {shift_details}
+
+Please respond to this e-invite to confirm your attendance.
+
+---
+
+Link to Adobe Connect Room (to be opened via the Adobe Connect App only)
+
+{adobe_link}
+
+NOTE: Since all WW SPS-WE trainings may involve customer accounts, Slack is NOT an approved tool for sharing customer data. Please make sure Adobe Connect is installed and ready before your training begins.
+
+Supervisors and Managers listed as optional attendees are added for visibility only. If this training isn't relevant to you, please skip it and/or decline the invite so it doesn't block your calendar.
+
+---
+
+First time using Adobe Connect?
+
+Please ensure that the Adobe Connect application is installed on your laptop. If it isn't already installed, you can do so by following these steps:
+Start Menu > Search for "Software Center" > Open Software Center > Search for "Adobe Connect" > Click "Install."
+
+Once installed, please copy the room link, paste it in the application and click on Continue. Now select Guest as the option and type your full name. Post that, click on Enter Room.
+
+Please join 5 - 10 minutes early to have everything setup before the class begins.
+
+Finally, ensure that the below hardware and software are available and set up:
+
+  [YES] Please ensure you are camera-ready, as this is a virtual session.
+  [NO]  Please do NOT open Adobe Connect via a browser
+  [YES] Corporate USB Headset (Not your own headset)
+  [YES] Please be available on Slack during the training
+
+---
+
+Issues with Adobe Connect Application?
+  - Troubleshoot Adobe Connect | 24*7 Chat Support
+  - If you cannot install it due to laptop permissions, request Admin Rights
+  - If you still struggle with installing Adobe Connect, contact IT immediately
+
+---
+
+Please reach out, should there be any questions/concerns. I'm looking forward to having you in the training!
+
+{signature}
+"""
     return body
 
 
-def generate_ics_file(subject, description, start_dt, end_dt, required_emails, optional_emails, organizer_name, organizer_email, location):
-    """Generate an ICS calendar file content"""
-    # Generate unique ID for the event
-    uid = str(uuid.uuid4())
+def generate_mailto_link(subject, body, required_emails, optional_emails):
+    """Generate a mailto: link that opens Outlook with pre-filled content"""
+    to_field = ";".join([e.strip() for e in required_emails if e.strip()])
+    cc_field = ";".join([e.strip() for e in optional_emails if e.strip()])
 
-    # Format dates for ICS (UTC format)
-    dtstart = start_dt.strftime("%Y%m%dT%H%M%S")
-    dtend = end_dt.strftime("%Y%m%dT%H%M%S")
-    dtstamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    # URL encode the components
+    params = {
+        "subject": subject,
+        "body": body,
+    }
+    if cc_field:
+        params["cc"] = cc_field
 
-    # Escape special characters in description for ICS
-    desc_escaped = description.replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
+    query_string = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+    mailto_link = f"mailto:{to_field}?{query_string}"
 
-    # Build attendee lines
-    attendee_lines = ""
-    for email in required_emails:
-        email = email.strip()
-        if email:
-            attendee_lines += f"ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{email}\n"
-
-    for email in optional_emails:
-        email = email.strip()
-        if email:
-            attendee_lines += f"ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{email}\n"
-
-    ics_content = f"""BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Training Invite Generator//SPS-WE IND//EN
-CALSCALE:GREGORIAN
-METHOD:REQUEST
-BEGIN:VEVENT
-UID:{uid}
-DTSTART:{dtstart}
-DTEND:{dtend}
-DTSTAMP:{dtstamp}
-ORGANIZER;CN={organizer_name}:mailto:{organizer_email}
-SUMMARY:{subject}
-DESCRIPTION:{desc_escaped}
-LOCATION:{location}
-{attendee_lines}STATUS:CONFIRMED
-SEQUENCE:0
-BEGIN:VALARM
-TRIGGER:-PT15M
-ACTION:DISPLAY
-DESCRIPTION:Reminder
-END:VALARM
-END:VEVENT
-END:VCALENDAR"""
-
-    return ics_content
+    return mailto_link
 
 
 def send_outlook_calendar_invite(subject, plain_body, required_emails, optional_emails, start_dt, end_dt):
@@ -375,7 +362,6 @@ def send_outlook_calendar_invite(subject, plain_body, required_emails, optional_
         outlook = win32com.client.Dispatch("Outlook.Application")
         appointment = outlook.CreateItem(1)  # 1 = olAppointmentItem
 
-        # Set meeting properties
         appointment.MeetingStatus = 1  # olMeeting
         appointment.Subject = subject
         appointment.Body = plain_body
@@ -385,7 +371,6 @@ def send_outlook_calendar_invite(subject, plain_body, required_emails, optional_
         appointment.ReminderMinutesBeforeStart = 15
         appointment.BusyStatus = 2  # olBusy
 
-        # Add required attendees
         if required_emails:
             for email in required_emails:
                 email = email.strip()
@@ -393,7 +378,6 @@ def send_outlook_calendar_invite(subject, plain_body, required_emails, optional_
                     recipient = appointment.Recipients.Add(email)
                     recipient.Type = 1  # olRequired
 
-        # Add optional attendees
         if optional_emails:
             for email in optional_emails:
                 email = email.strip()
@@ -431,8 +415,7 @@ required_fields = {
     "Shift Details": shift_details,
     "Adobe Connect Link": adobe_connect_link,
     "Required Attendees": required_attendees,
-    "Sender Name": sender_name,
-    "Sender Email": sender_email
+    "Sender Name": sender_name
 }
 
 missing_fields = [k for k, v in required_fields.items() if not v.strip()]
@@ -472,9 +455,9 @@ if all(v.strip() for v in required_fields.values()):
         st.markdown(f"**Subject:** `{subject}`")
         st.markdown(f"**Duration:** {duration_display}")
         st.markdown(f"**Time:** {start_time.strftime('%I:%M %p')} - {end_time.strftime('%I:%M %p')}")
-        st.markdown(f"**Required Attendees:** {len(req_emails)} recipient(s)")
+        st.markdown(f"**Required Attendees:** {len(req_emails)} recipient(s) - {', '.join(req_emails)}")
         if opt_emails:
-            st.markdown(f"**Optional Attendees:** {len(opt_emails)} recipient(s)")
+            st.markdown(f"**Optional Attendees:** {len(opt_emails)} recipient(s) - {', '.join(opt_emails)}")
 
     with st.expander("Preview Email Body (HTML)", expanded=False):
         st.components.v1.html(html_body, height=600, scrolling=True)
@@ -482,17 +465,17 @@ if all(v.strip() for v in required_fields.values()):
     st.divider()
 
     # ============================================================
-    # ACTION BUTTONS - Both modes available
+    # ACTION BUTTONS
     # ============================================================
 
-    st.subheader("Send Options")
+    st.subheader("Send Invite")
 
-    col_btn1, col_btn2, col_spacer = st.columns([1, 1, 2])
+    if OUTLOOK_AVAILABLE:
+        # LOCAL MODE: Direct Outlook Send
+        col_btn1, col_btn2, col_spacer = st.columns([1, 1, 2])
 
-    # Option 1: Direct Outlook Send (Windows only)
-    with col_btn1:
-        if OUTLOOK_AVAILABLE:
-            if st.button("Send via Outlook", type="primary", use_container_width=True):
+        with col_btn1:
+            if st.button("Send via Outlook (Direct)", type="primary", use_container_width=True):
                 with st.spinner("Sending calendar invite via Outlook..."):
                     success, message = send_outlook_calendar_invite(
                         subject, plain_body, req_emails, opt_emails, start_dt, end_dt
@@ -502,61 +485,66 @@ if all(v.strip() for v in required_fields.values()):
                     st.balloons()
                 else:
                     st.error(message)
-        else:
-            st.button("Send via Outlook", type="primary", use_container_width=True, disabled=True,
-                     help="Outlook COM not available - use Download ICS instead")
-            st.caption("*Not available in cloud mode*")
 
-    # Option 2: Download ICS (works everywhere)
-    with col_btn2:
-        # Generate ICS content
-        ics_content = generate_ics_file(
-            subject=subject,
-            description=plain_body,
-            start_dt=start_dt,
-            end_dt=end_dt,
-            required_emails=req_emails,
-            optional_emails=opt_emails,
-            organizer_name=sender_name,
-            organizer_email=sender_email,
-            location=adobe_connect_link
-        )
+        with col_btn2:
+            # Also offer the mailto option locally
+            mailto_link = generate_mailto_link(subject, plain_body, req_emails, opt_emails)
+            st.markdown(
+                f'<a href="{mailto_link}" class="outlook-btn" target="_blank">Open in Outlook (Email)</a>',
+                unsafe_allow_html=True
+            )
 
-        # Create filename
-        safe_skill = re.sub(r'[^a-zA-Z0-9]', '_', skill_name)[:30]
-        ics_filename = f"Training_Invite_{safe_skill}.ics"
-
-        st.download_button(
-            label="Download ICS File",
-            data=ics_content,
-            file_name=ics_filename,
-            mime="text/calendar",
-            use_container_width=True
-        )
-
-    # Instructions for ICS usage
-    with st.expander("How to use the ICS file", expanded=False):
+    else:
+        # CLOUD MODE: Mailto link to open user's Outlook
         st.markdown("""
-        **After downloading the `.ics` file:**
+        <div class="info-box">
+        <strong>How it works:</strong> Click the button below to open your Outlook with the invitation 
+        pre-filled (To, CC, Subject, and Body). Just review and click Send!
+        </div>
+        """, unsafe_allow_html=True)
 
-        1. **Double-click** the downloaded `.ics` file
-        2. **Outlook will open** with the meeting invite pre-filled:
-           - Subject, time, and duration are set
-           - All attendees (Required + Optional) are listed
-           - The full training invitation body is included
-        3. **Review** the invite and make any final changes
-        4. Click **"Send"** - Done!
+        st.markdown("")
 
-        **Note:** The invite will be sent from YOUR Outlook account, so recipients will see it coming from you.
-        """)
+        # Generate mailto link
+        mailto_link = generate_mailto_link(subject, plain_body, req_emails, opt_emails)
+
+        # Display as a prominent clickable button
+        st.markdown(
+            f"""
+            <div style="text-align: center; margin: 20px 0;">
+                <a href="{mailto_link}" class="outlook-btn" target="_blank">
+                    &#9993; Open in Outlook - Send Invite
+                </a>
+            </div>
+            <p style="text-align: center; color: #666; font-size: 0.9rem;">
+                Clicking this button will open your default email client (Outlook) with all fields pre-filled.<br>
+                Just review the content and click <strong>Send</strong>!
+            </p>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("")
+
+        # Also provide a copy-paste fallback
+        with st.expander("Alternative: Copy content manually", expanded=False):
+            st.markdown("**Subject (copy this):**")
+            st.code(subject, language=None)
+            st.markdown("**To (copy this):**")
+            st.code(";".join(req_emails), language=None)
+            if opt_emails:
+                st.markdown("**CC (copy this):**")
+                st.code(";".join(opt_emails), language=None)
+            st.markdown("**Body (copy this):**")
+            st.code(plain_body, language=None)
 
 # ============================================================
 # FOOTER
 # ============================================================
 st.divider()
-mode_text = "Local Mode (Outlook COM)" if OUTLOOK_AVAILABLE else "Cloud Mode (ICS Download)"
+mode_text = "Local Mode (Outlook COM)" if OUTLOOK_AVAILABLE else "Cloud Mode (Mailto)"
 st.markdown(f"""
 <div style="text-align: center; color: #888; font-size: 0.85rem;">
-    Training Invitation Generator v2.0 | SPS-WE IND | {mode_text}
+    Training Invitation Generator v2.1 | SPS-WE IND | {mode_text}
 </div>
 """, unsafe_allow_html=True)
